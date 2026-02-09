@@ -41,21 +41,53 @@ class X::Client
     get('/users/me', query: { 'user.fields' => 'profile_image_url,name,username' })
   end
 
-  # Upload media for DMs and Tweets
-  # NOTE: X API v2 uses the v1.1 media upload endpoint by design.
-  # Upload media first to get media_id, then attach it to v2 DM/tweet requests.
-  # Docs: https://developer.x.com/en/docs/twitter-api/v1/media/upload-media/overview
+  # Upload media for DMs and Tweets using X API v2 chunked upload
+  # Three-step process: INIT -> APPEND -> FINALIZE
+  # Docs: https://docs.x.com/x-api/media/quickstart/media-upload-chunked
   def upload_media(file_data, mime_type:)
-    response = HTTParty.post(
-      'https://upload.twitter.com/1.1/media/upload.json',
+    # Step 1: Initialize upload
+    init_response = HTTParty.post(
+      'https://api.x.com/2/media/upload',
       headers: { 'Authorization' => "Bearer #{bearer_token}" },
       body: {
-        media_data: Base64.strict_encode64(file_data),
+        command: 'INIT',
+        media_type: mime_type,
+        total_bytes: file_data.bytesize,
         media_category: media_category_from_mime(mime_type)
       }
     )
+    init_data = handle_response(init_response)
+    media_id = init_data.dig('data', 'id')
 
-    handle_response(response)
+    # Step 2: Append media data
+    HTTParty.post(
+      'https://api.x.com/2/media/upload',
+      headers: {
+        'Authorization' => "Bearer #{bearer_token}",
+        'Content-Type' => 'multipart/form-data'
+      },
+      multipart: true,
+      body: {
+        command: 'APPEND',
+        media_id: media_id,
+        segment_index: 0,
+        media: file_data
+      }
+    )
+
+    # Step 3: Finalize upload
+    finalize_response = HTTParty.post(
+      'https://api.x.com/2/media/upload',
+      headers: { 'Authorization' => "Bearer #{bearer_token}" },
+      body: {
+        command: 'FINALIZE',
+        media_id: media_id
+      }
+    )
+
+    finalize_data = handle_response(finalize_response)
+    # Return v1.1-compatible format for backward compatibility
+    { 'media_id_string' => finalize_data.dig('data', 'id') }
   end
 
   private
