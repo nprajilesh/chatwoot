@@ -99,7 +99,9 @@ RSpec.describe 'Webhooks::XController', type: :request do
     end
 
     it 'returns unauthorized when client secret is not configured' do
-      get '/webhooks/x', params: { crc_token: 'test' }
+      with_modified_env X_CLIENT_SECRET: nil do
+        get '/webhooks/x', params: { crc_token: 'test' }
+      end
 
       expect(response).to have_http_status(:unauthorized)
     end

@@ -73,7 +73,16 @@ RSpec.describe X::TokenService do
       lock_manager = instance_double(Redis::LockManager, lock: true, unlock: true)
       allow(Redis::LockManager).to receive(:new).and_return(lock_manager)
       allow(channel).to receive(:reload).and_call_original
-      allow(channel).to receive(:token_valid?).and_return(true)
+
+      # Make token expired so refresh is triggered
+      channel.update!(token_expires_at: 1.hour.ago)
+
+      # Stub OAuth2 refresh
+      allow_any_instance_of(described_class).to receive(:attempt_refresh_token).and_return({
+        access_token: 'new-token',
+        refresh_token: 'new-refresh',
+        expires_at: 2.hours.from_now
+      })
 
       described_class.new(channel: channel).access_token
 

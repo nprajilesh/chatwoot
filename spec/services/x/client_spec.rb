@@ -14,7 +14,11 @@ RSpec.describe X::Client do
             'Content-Type' => 'application/json'
           }
         )
-        .to_return(status: 201, body: { id: 'dm-123' }.to_json)
+        .to_return(
+          status: 201,
+          body: { id: 'dm-123' }.to_json,
+          headers: { 'Content-Type' => 'application/json' }
+        )
 
       result = client.send_direct_message(participant_id: '67890', text: 'Hello!')
 
@@ -28,7 +32,11 @@ RSpec.describe X::Client do
         .with(
           body: { text: 'Check this', attachments: attachments }.to_json
         )
-        .to_return(status: 201, body: { id: 'dm-124' }.to_json)
+        .to_return(
+          status: 201,
+          body: { id: 'dm-124' }.to_json,
+          headers: { 'Content-Type' => 'application/json' }
+        )
 
       result = client.send_direct_message(participant_id: '67890', text: 'Check this', attachments: attachments)
 
@@ -46,7 +54,11 @@ RSpec.describe X::Client do
             'Content-Type' => 'application/json'
           }
         )
-        .to_return(status: 201, body: { id: 'tweet-456' }.to_json)
+        .to_return(
+          status: 201,
+          body: { id: 'tweet-456' }.to_json,
+          headers: { 'Content-Type' => 'application/json' }
+        )
 
       result = client.create_tweet(text: 'Hello X!')
 
@@ -61,7 +73,11 @@ RSpec.describe X::Client do
             reply: { in_reply_to_tweet_id: 'tweet-123' }
           }.to_json
         )
-        .to_return(status: 201, body: { id: 'tweet-789' }.to_json)
+        .to_return(
+          status: 201,
+          body: { id: 'tweet-789' }.to_json,
+          headers: { 'Content-Type' => 'application/json' }
+        )
 
       result = client.create_tweet(text: 'Reply tweet', reply_to_tweet_id: 'tweet-123')
 
@@ -82,7 +98,8 @@ RSpec.describe X::Client do
               name: 'John Doe',
               profile_image_url: 'https://example.com/avatar.jpg'
             }
-          }.to_json
+          }.to_json,
+          headers: { 'Content-Type' => 'application/json' }
         )
 
       result = client.user('12345')
@@ -103,7 +120,8 @@ RSpec.describe X::Client do
               username: 'myaccount',
               name: 'My Account'
             }
-          }.to_json
+          }.to_json,
+          headers: { 'Content-Type' => 'application/json' }
         )
 
       result = client.me
@@ -115,7 +133,11 @@ RSpec.describe X::Client do
   describe 'error handling' do
     it 'raises UnauthorizedError for 401 responses' do
       stub_request(:post, 'https://api.x.com/2/dm_conversations/with/67890/messages')
-        .to_return(status: 401, body: { errors: [{ message: 'Unauthorized' }] }.to_json)
+        .to_return(
+          status: 401,
+          body: { errors: [{ message: 'Unauthorized' }] }.to_json,
+          headers: { 'Content-Type' => 'application/json' }
+        )
 
       expect do
         client.send_direct_message(participant_id: '67890', text: 'Hello!')
@@ -128,7 +150,10 @@ RSpec.describe X::Client do
       stub_request(:post, 'https://api.x.com/2/dm_conversations/with/67890/messages')
         .to_return(
           status: 429,
-          headers: { 'x-rate-limit-reset' => reset_time.to_s },
+          headers: {
+            'x-rate-limit-reset' => reset_time.to_s,
+            'Content-Type' => 'application/json'
+          },
           body: { errors: [{ message: 'Rate limit exceeded' }] }.to_json
         )
 
@@ -141,7 +166,8 @@ RSpec.describe X::Client do
       stub_request(:post, 'https://api.x.com/2/dm_conversations/with/67890/messages')
         .to_return(
           status: 400,
-          body: { errors: [{ message: 'Bad request' }] }.to_json
+          body: { errors: [{ message: 'Bad request' }] }.to_json,
+          headers: { 'Content-Type' => 'application/json' }
         )
 
       expect do

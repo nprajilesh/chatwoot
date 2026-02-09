@@ -1,5 +1,5 @@
 class X::IncomingMessageService
-  pattr_initialize [:channel!, :message_data, :tweet_data]
+  pattr_initialize [:channel!, :dm_event, :tweet_data]
 
   def perform
     # Skip if this is an outgoing message (echo)
@@ -87,7 +87,7 @@ class X::IncomingMessageService
 
   def fetch_user_profile
     # Use cached data from webhook if available
-    return @message_data[:sender] if @message_data&.[](:sender).present?
+    return @dm_event.dig(:message_create, :sender) if @dm_event&.dig(:message_create, :sender).present?
     return @tweet_data[:user] if @tweet_data&.[](:user).present?
 
     # Otherwise fetch from API
@@ -100,7 +100,8 @@ class X::IncomingMessageService
 
   def create_attachments(message)
     # Handle DM attachments
-    create_dm_attachment(message, @message_data[:attachment]) if direct_message? && @message_data&.[](:attachment).present?
+    attachment = @dm_event&.dig(:message_create, :message_data, :attachment)
+    create_dm_attachment(message, attachment) if direct_message? && attachment.present?
 
     # Tweet attachments (images, videos) from extended_entities
     return unless tweet_message? && @tweet_data&.[](:extended_entities).present?
@@ -138,21 +139,21 @@ class X::IncomingMessageService
   end
 
   def message_content
-    return @message_data.dig(:message_data, :text) if direct_message?
+    return @dm_event.dig(:message_create, :message_data, :text) if direct_message?
     return @tweet_data[:text] if tweet_message?
 
     ''
   end
 
   def sender_id
-    return @message_data.dig(:message_data, :sender_id) if direct_message?
+    return @dm_event.dig(:message_create, :sender_id) if direct_message?
     return @tweet_data.dig(:user, :id_str) if tweet_message?
 
     nil
   end
 
   def message_source_id
-    return @message_data.dig(:message_data, :id) if direct_message?
+    return @dm_event[:id] if direct_message?
     return @tweet_data[:id_str] if tweet_message?
 
     nil
@@ -160,7 +161,7 @@ class X::IncomingMessageService
 
   def message_timestamp
     if direct_message?
-      timestamp_ms = @message_data.dig(:message_data, :created_timestamp).to_i
+      timestamp_ms = @dm_event[:created_timestamp].to_i
       Time.zone.at(timestamp_ms / 1000).utc
     elsif tweet_message?
       Time.zone.parse(@tweet_data[:created_at]).utc
@@ -170,7 +171,7 @@ class X::IncomingMessageService
   end
 
   def direct_message?
-    @message_data.present?
+    @dm_event.present?
   end
 
   def tweet_message?

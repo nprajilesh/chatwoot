@@ -69,6 +69,18 @@ RSpec.describe X::SendOnXService do
     context 'with tweet replies' do
       it 'sends tweet reply when in_reply_to_external_id is present' do
         allow(x_client).to receive(:create_tweet).and_return({ 'id' => 'tweet-456' })
+        allow(x_client).to receive(:send_direct_message)
+
+        # Create the original tweet message that we're replying to
+        original_tweet = create(
+          :message,
+          message_type: :incoming,
+          inbox: inbox,
+          conversation: conversation,
+          account: inbox.account,
+          content: 'Original tweet',
+          source_id: 'tweet-123'
+        )
 
         message = create(
           :message,
@@ -79,7 +91,6 @@ RSpec.describe X::SendOnXService do
           content: 'Reply tweet',
           content_attributes: { 'in_reply_to_external_id' => 'tweet-123' }
         )
-        message.update!(source_id: nil)
 
         described_class.new(message: message).perform
 
@@ -87,6 +98,7 @@ RSpec.describe X::SendOnXService do
           text: 'Reply tweet',
           reply_to_tweet_id: 'tweet-123'
         )
+        expect(x_client).not_to have_received(:send_direct_message)
         expect(message.reload.source_id).to eq('tweet-456')
       end
     end

@@ -36,7 +36,9 @@ RSpec.describe Webhooks::XEventsJob do
 
         expect(X::IncomingMessageService).to have_received(:new).with(
           channel: channel,
-          message_data: hash_including(sender_id: '67890')
+          dm_event: hash_including(
+            message_create: hash_including(sender_id: '67890')
+          )
         )
         expect(message_service).to have_received(:perform)
       end

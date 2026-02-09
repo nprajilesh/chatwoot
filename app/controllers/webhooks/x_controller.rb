@@ -3,12 +3,15 @@ class Webhooks::XController < ActionController::API
 
   # GET /webhooks/x - CRC challenge verification
   # X sends this to verify webhook ownership
+  # Uses OAuth 2.0 Client Secret for HMAC-SHA256
+  # Docs: https://docs.x.com/x-api/webhooks/introduction
   def verify
     crc_token = params[:crc_token]
     return head :bad_request if crc_token.blank?
 
-    client_secret = GlobalConfigService.load('X_CLIENT_SECRET', nil)
-    return head :unauthorized unless client_secret
+    # Use OAuth 2.0 Client Secret for CRC verification
+    client_secret = GlobalConfigService.load('X_CLIENT_SECRET', '')
+    return head :unauthorized if client_secret.blank?
 
     # Generate HMAC-SHA256 response
     response_token = OpenSSL::HMAC.digest('SHA256', client_secret, crc_token)

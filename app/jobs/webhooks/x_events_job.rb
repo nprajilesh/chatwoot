@@ -31,15 +31,14 @@ class Webhooks::XEventsJob < MutexApplicationJob
     @event[:direct_message_events].each do |dm_event|
       next unless dm_event[:message_create].present?
 
-      message_data = dm_event[:message_create]
-      sender_id = message_data[:sender_id]
-      recipient_id = message_data[:target][:recipient_id]
+      sender_id = dm_event.dig(:message_create, :sender_id)
+      recipient_id = dm_event.dig(:message_create, :target, :recipient_id)
 
       key = format(::Redis::Alfred::X_MESSAGE_MUTEX, sender_id: sender_id, recipient_id: recipient_id)
       with_lock(key, 10.seconds) do
         X::IncomingMessageService.new(
           channel: channel,
-          message_data: message_data
+          dm_event: dm_event
         ).perform
       end
     end

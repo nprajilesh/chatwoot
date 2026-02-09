@@ -438,7 +438,7 @@
   locked: false
 - name: X_CLIENT_SECRET
   display_title: 'X OAuth 2.0 Client Secret'
-  description: 'OAuth 2.0 Client Secret from X Developer Portal'
+  description: 'OAuth 2.0 Client Secret from X Developer Portal - also used for webhook CRC verification'
   locked: false
   type: secret
 # ------- End of X Channel Related Config ------- #

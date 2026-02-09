@@ -2,15 +2,17 @@ class X::CallbacksController < ApplicationController
   include X::OAuthHelper
 
   def show
-    # Validate JWT state and extract account_id
+    # Validate JWT state and extract account_id and code_verifier
     decoded_state = jwt_decode(params[:state])
     account = Account.find(decoded_state['sub'])
+    code_verifier = decoded_state['code_verifier']
 
-    # Exchange code for tokens using OAuth2 gem
+    # Exchange code for tokens using OAuth2 gem with PKCE
     client = auth_client
     token = client.auth_code.get_token(
       params[:code],
-      redirect_uri: "#{ENV.fetch('FRONTEND_URL', nil)}/x/callback"
+      redirect_uri: "#{ENV.fetch('FRONTEND_URL', nil)}/x/callback",
+      code_verifier: code_verifier
     )
 
     # Fetch user profile
@@ -24,6 +26,9 @@ class X::CallbacksController < ApplicationController
       refresh_token: token.refresh_token,
       expires_in: token.expires_in
     )
+
+    # Reload to ensure inbox association is loaded
+    x_channel.reload
 
     redirect_to "#{ENV.fetch('FRONTEND_URL', nil)}/app/accounts/#{account.id}/settings/inboxes/#{x_channel.inbox.id}"
   rescue JWT::DecodeError => e
