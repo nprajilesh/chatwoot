@@ -2,9 +2,11 @@ class X::WebhookSetupService
   pattr_initialize [:channel!]
 
   def perform
-    return if webhook_already_registered?
+    # Register webhook if not already registered
+    webhook_id = webhook_already_registered? ? channel.webhook_id : register_webhook
 
-    register_webhook
+    # Create subscription for the user
+    create_subscription(webhook_id) if webhook_id
   rescue StandardError => e
     Rails.logger.error "Failed to setup X webhook for channel #{channel.id}: #{e.message}"
     raise
@@ -17,24 +19,27 @@ class X::WebhookSetupService
   end
 
   def register_webhook
-    # X Account Activity API endpoint for webhook registration
-    # POST /1.1/account_activity/all/:env_name/webhooks.json
-    env_name = GlobalConfigService.load('X_WEBHOOK_ENV', 'production')
+    # X API v2 Webhooks endpoint
+    # POST /2/webhooks?url=<webhook_url>
+    # Docs: https://docs.x.com/x-api/account-activity/migrate/overview
     webhook_url = "#{ENV.fetch('FRONTEND_URL', nil)}/webhooks/x"
 
     response = HTTParty.post(
-      "https://api.x.com/1.1/account_activity/all/#{env_name}/webhooks.json",
+      "https://api.x.com/2/webhooks",
       headers: {
         'Authorization' => "Bearer #{channel.bearer_token}",
         'Content-Type' => 'application/json'
       },
-      body: { url: webhook_url }.to_json
+      query: { url: webhook_url }
     )
 
     if response.code == 200 || response.code == 201
       webhook_data = response.parsed_response
-      channel.update!(webhook_id: webhook_data['id'])
+      # V2 response structure: { "data": { "id": "...", ... } }
+      webhook_id = webhook_data.dig('data', 'id') || webhook_data['id']
+      channel.update!(webhook_id: webhook_id)
       Rails.logger.info "Successfully registered X webhook for channel #{channel.id}"
+      webhook_id
     else
       error_msg = response.parsed_response&.dig('errors', 0, 'message') || response.body
       raise "Failed to register webhook: #{error_msg}"
@@ -44,5 +49,30 @@ class X::WebhookSetupService
     # Webhooks can be set up later manually if needed
     Rails.logger.error "X webhook registration failed: #{e.message}"
     nil
+  end
+
+  def create_subscription(webhook_id)
+    # X API v2 Subscription endpoint
+    # POST /2/account_activity/webhooks/:webhook_id/subscriptions/all
+    # Requires user-level OAuth token
+    # Docs: https://docs.x.com/x-api/account-activity/migrate/overview
+    response = HTTParty.post(
+      "https://api.x.com/2/account_activity/webhooks/#{webhook_id}/subscriptions/all",
+      headers: {
+        'Authorization' => "Bearer #{channel.bearer_token}",
+        'Content-Type' => 'application/json'
+      }
+    )
+
+    if response.code == 200 || response.code == 201 || response.code == 204
+      Rails.logger.info "Successfully created X subscription for channel #{channel.id}"
+    else
+      error_msg = response.parsed_response&.dig('errors', 0, 'message') || response.body
+      Rails.logger.error "Failed to create subscription: #{error_msg}"
+      # Don't raise - subscription can be created later if needed
+    end
+  rescue StandardError => e
+    Rails.logger.error "X subscription creation failed: #{e.message}"
+    # Don't raise - allow channel creation to succeed even if subscription fails
   end
 end

@@ -441,11 +441,6 @@
   description: 'OAuth 2.0 Client Secret from X Developer Portal'
   locked: false
   type: secret
-- name: X_WEBHOOK_ENV
-  display_title: 'X Webhook Environment'
-  description: 'X Account Activity API webhook environment name (defaults to production)'
-  value: 'production'
-  locked: false
 # ------- End of X Channel Related Config ------- #
 
 # ------- OG Image Related Config ------- #
