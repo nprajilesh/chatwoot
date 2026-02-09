@@ -1,4 +1,4 @@
-# Processes X (Twitter) webhook events for direct messages and mentions
+# Processes X webhook events for direct messages and mentions
 # https://developer.x.com/en/docs/x-api/webhooks/introduction
 class Webhooks::XEventsJob < MutexApplicationJob
   queue_as :default

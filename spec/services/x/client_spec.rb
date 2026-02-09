@@ -40,7 +40,7 @@ RSpec.describe X::Client do
     it 'creates a tweet' do
       stub_request(:post, 'https://api.x.com/2/tweets')
         .with(
-          body: { text: 'Hello Twitter!' }.to_json,
+          body: { text: 'Hello X!' }.to_json,
           headers: {
             'Authorization' => "Bearer #{bearer_token}",
             'Content-Type' => 'application/json'
@@ -48,7 +48,7 @@ RSpec.describe X::Client do
         )
         .to_return(status: 201, body: { id: 'tweet-456' }.to_json)
 
-      result = client.create_tweet(text: 'Hello Twitter!')
+      result = client.create_tweet(text: 'Hello X!')
 
       expect(result['id']).to eq('tweet-456')
     end
