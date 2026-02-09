@@ -431,13 +431,13 @@
   type: secret
 # ------- End of TikTok Channel Related Config ------- #
 
-# ------- X (Twitter) Channel Related Config ------- #
+# ------- X Channel Related Config ------- #
 - name: X_CLIENT_ID
-  display_title: 'X (Twitter) OAuth 2.0 Client ID'
+  display_title: 'X OAuth 2.0 Client ID'
   description: 'OAuth 2.0 Client ID from X Developer Portal'
   locked: false
 - name: X_CLIENT_SECRET
-  display_title: 'X (Twitter) OAuth 2.0 Client Secret'
+  display_title: 'X OAuth 2.0 Client Secret'
   description: 'OAuth 2.0 Client Secret from X Developer Portal'
   locked: false
   type: secret
@@ -446,7 +446,7 @@
   description: 'X Account Activity API webhook environment name (defaults to production)'
   value: 'production'
   locked: false
-# ------- End of X (Twitter) Channel Related Config ------- #
+# ------- End of X Channel Related Config ------- #
 
 # ------- OG Image Related Config ------- #
 - name: OG_IMAGE_CDN_URL
