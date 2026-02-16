@@ -109,17 +109,19 @@ class Attachment < ApplicationRecord
   end
 
   def file_metadata
-    metadata = {
-      extension: extension,
-      data_url: file_url,
-      thumb_url: thumb_url,
-      file_size: file.byte_size,
-      width: file.metadata[:width],
-      height: file.metadata[:height]
-    }
-
+    metadata = file.attached? ? attached_file_metadata : external_file_metadata
     metadata[:data_url] = metadata[:thumb_url] = external_url if message.inbox.instagram? && message.incoming?
     metadata
+  end
+
+  def attached_file_metadata
+    { extension: extension, data_url: file_url, thumb_url: thumb_url,
+      file_size: file.byte_size, width: file.metadata[:width], height: file.metadata[:height] }
+  end
+
+  def external_file_metadata
+    { extension: extension, data_url: external_url.presence || file_url, thumb_url: external_url.presence || thumb_url,
+      file_size: nil, width: nil, height: nil }
   end
 
   def location_metadata

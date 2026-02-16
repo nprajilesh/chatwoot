@@ -6,7 +6,6 @@ class Webhooks::XEventsJob < MutexApplicationJob
 
   def perform(event)
     @event = event.with_indifferent_access
-
     return if channel_is_inactive?
 
     process_event
@@ -29,7 +28,7 @@ class Webhooks::XEventsJob < MutexApplicationJob
 
   def process_direct_messages
     @event[:direct_message_events].each do |dm_event|
-      next unless dm_event[:message_create].present?
+      next if dm_event[:message_create].blank?
 
       sender_id = dm_event.dig(:message_create, :sender_id)
       recipient_id = dm_event.dig(:message_create, :target, :recipient_id)
@@ -38,7 +37,8 @@ class Webhooks::XEventsJob < MutexApplicationJob
       with_lock(key, 10.seconds) do
         X::IncomingMessageService.new(
           channel: channel,
-          dm_event: dm_event
+          dm_event: dm_event,
+          users: @event[:users]
         ).perform
       end
     end
@@ -46,20 +46,39 @@ class Webhooks::XEventsJob < MutexApplicationJob
 
   def process_tweets
     @event[:tweet_create_events].each do |tweet_event|
-      # Only process mentions directed at the channel's profile
-      next unless tweet_event[:in_reply_to_user_id] == channel.profile_id
+      next if user_has_blocked?(tweet_event)
 
-      tweet_event[:id_str]
-      sender_id = tweet_event[:user][:id_str]
+      # Process outgoing tweets as echoes (like old Twitter's TweetParserService)
+      # Process incoming tweets only if they mention the channel
+      next unless outgoing_tweet?(tweet_event) || mentions_channel?(tweet_event)
 
-      key = format(::Redis::Alfred::X_MESSAGE_MUTEX, sender_id: sender_id, recipient_id: channel.profile_id)
-      with_lock(key, 10.seconds) do
-        X::IncomingMessageService.new(
-          channel: channel,
-          tweet_data: tweet_event
-        ).perform
-      end
+      process_tweet_event(tweet_event)
     end
+  end
+
+  def process_tweet_event(tweet_event)
+    sender_id = tweet_event[:user][:id_str]
+
+    key = format(::Redis::Alfred::X_MESSAGE_MUTEX, sender_id: sender_id, recipient_id: channel.profile_id)
+    with_lock(key, 10.seconds) do
+      X::IncomingMessageService.new(
+        channel: channel,
+        tweet_data: tweet_event
+      ).perform
+    end
+  end
+
+  def outgoing_tweet?(tweet_event)
+    tweet_event[:user][:id_str] == channel.profile_id
+  end
+
+  def user_has_blocked?(tweet_event)
+    tweet_event[:user_has_blocked] == true
+  end
+
+  def mentions_channel?(tweet_event)
+    mentions = tweet_event.dig(:entities, :user_mentions) || []
+    mentions.any? { |m| m[:id_str] == channel.profile_id || m[:id].to_s == channel.profile_id }
   end
 
   def channel

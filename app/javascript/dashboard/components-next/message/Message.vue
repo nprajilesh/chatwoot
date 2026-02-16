@@ -10,7 +10,7 @@ import { useRoute } from 'vue-router';
 import { LocalStorage } from 'shared/helpers/localStorage';
 import { ACCOUNT_EVENTS } from 'dashboard/helper/AnalyticsHelper/events';
 import { LOCAL_STORAGE_KEYS } from 'dashboard/constants/localStorage';
-import { getInboxIconByType } from 'dashboard/helper/inbox';
+import { getInboxIconByType, INBOX_TYPES } from 'dashboard/helper/inbox';
 import { BUS_EVENTS } from 'shared/constants/busEvents';
 import {
   MESSAGE_TYPES,
@@ -241,7 +241,16 @@ const flexOrientationClass = computed(() => {
   return map[orientation.value];
 });
 
+const isTweetChannel = computed(() => {
+  const type = inbox.value?.channel_type;
+  return type === INBOX_TYPES.X || type === INBOX_TYPES.TWITTER;
+});
+
 const gridClass = computed(() => {
+  if (orientation.value === ORIENTATION.LEFT && isTweetChannel.value) {
+    return 'grid grid-cols-[24px_1fr]';
+  }
+
   const map = {
     [ORIENTATION.LEFT]: 'grid grid-cols-1fr',
     [ORIENTATION.RIGHT]: 'grid grid-cols-[1fr_24px]',
@@ -251,6 +260,13 @@ const gridClass = computed(() => {
 });
 
 const gridTemplate = computed(() => {
+  if (orientation.value === ORIENTATION.LEFT && isTweetChannel.value) {
+    return `
+      "avatar bubble"
+      "spacer meta"
+    `;
+  }
+
   const map = {
     [ORIENTATION.LEFT]: `
       "bubble"
@@ -273,7 +289,7 @@ const shouldGroupWithNext = computed(() => {
 
 const shouldShowAvatar = computed(() => {
   if (props.messageType === MESSAGE_TYPES.ACTIVITY) return false;
-  if (orientation.value === ORIENTATION.LEFT) return false;
+  if (orientation.value === ORIENTATION.LEFT) return isTweetChannel.value;
 
   return true;
 });
@@ -543,19 +559,41 @@ provideMessageContext({
       <div
         v-if="!shouldGroupWithNext && shouldShowAvatar"
         v-tooltip.left-end="avatarTooltip"
-        class="[grid-area:avatar] flex items-end"
+        class="[grid-area:avatar] flex"
+        :class="orientation === ORIENTATION.LEFT ? 'items-start' : 'items-end'"
       >
         <Avatar v-bind="avatarInfo" :size="24" />
       </div>
       <div
+        v-else-if="
+          shouldGroupWithNext &&
+          shouldShowAvatar &&
+          orientation === ORIENTATION.LEFT
+        "
+        class="[grid-area:avatar]"
+      />
+      <div
         class="[grid-area:bubble] flex"
         :class="{
           'ltr:ml-8 rtl:mr-8 justify-end': orientation === ORIENTATION.RIGHT,
-          'ltr:mr-8 rtl:ml-8': orientation === ORIENTATION.LEFT,
+          'ltr:mr-8 rtl:ml-8':
+            orientation === ORIENTATION.LEFT && !isTweetChannel,
+          'flex-col': isTweetChannel && orientation === ORIENTATION.LEFT,
           'min-w-0': variant === MESSAGE_VARIANTS.EMAIL,
         }"
         @contextmenu="openContextMenu($event)"
       >
+        <span
+          v-if="
+            isTweetChannel &&
+            orientation === ORIENTATION.LEFT &&
+            !shouldGroupWithNext &&
+            sender
+          "
+          class="text-xs text-n-slate-11 mb-0.5 font-medium"
+        >
+          {{ sender.name }}
+        </span>
         <Component :is="componentToRender" />
       </div>
       <MessageError

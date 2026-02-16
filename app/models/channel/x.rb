@@ -13,9 +13,14 @@
 #  token_expires_at           :datetime
 #  refresh_token_expires_at   :datetime
 #  authorization_error_count  :integer          default(0)
-#  webhook_id                 :string
+#  webhook_id                 :string           (deprecated - using global webhook now)
 #  created_at                 :datetime         not null
 #  updated_at                 :datetime         not null
+#
+# X uses a global webhook pattern (like Instagram/TikTok):
+# - One webhook URL configured for the entire installation
+# - Each user subscribes to this webhook individually
+# - Events include for_user_id to route to correct channel
 #
 
 class Channel::X < ApplicationRecord
@@ -37,7 +42,8 @@ class Channel::X < ApplicationRecord
   belongs_to :account
 
   # Callbacks
-  after_create :setup_webhook
+  after_create_commit :subscribe_to_webhook
+  before_destroy :unsubscribe_from_webhook
 
   # Check if access token is expired
   def token_expired?
@@ -65,9 +71,18 @@ class Channel::X < ApplicationRecord
 
   private
 
-  def setup_webhook
-    X::WebhookSetupService.new(channel: self).perform
+  def subscribe_to_webhook
+    # Subscribe this user to the global webhook (Instagram pattern)
+    # Similar to Instagram's subscribe() method using page token
+    X::SubscriptionService.new(channel: self).subscribe
   rescue StandardError => e
-    Rails.logger.error("Failed to setup X webhook: #{e.message}")
+    Rails.logger.error("Failed to subscribe X user to webhook: #{e.message}")
+  end
+
+  def unsubscribe_from_webhook
+    X::SubscriptionService.new(channel: self).unsubscribe
+  rescue StandardError => e
+    Rails.logger.error("Failed to unsubscribe X user from webhook: #{e.message}")
+    true # Don't fail destroy
   end
 end

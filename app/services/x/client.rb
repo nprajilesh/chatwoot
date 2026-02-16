@@ -41,56 +41,43 @@ class X::Client
     get('/users/me', query: { 'user.fields' => 'profile_image_url,name,username' })
   end
 
-  # Upload media for DMs and Tweets using X API v2 chunked upload
-  # Three-step process: INIT -> APPEND -> FINALIZE
+  # Upload media for DMs and Tweets using X API v2 chunked upload (INIT -> APPEND -> FINALIZE)
   # Docs: https://docs.x.com/x-api/media/quickstart/media-upload-chunked
   def upload_media(file_data, mime_type:)
-    # Step 1: Initialize upload
-    init_response = HTTParty.post(
-      'https://api.x.com/2/media/upload',
-      headers: { 'Authorization' => "Bearer #{bearer_token}" },
-      body: {
-        command: 'INIT',
-        media_type: mime_type,
-        total_bytes: file_data.bytesize,
-        media_category: media_category_from_mime(mime_type)
-      }
-    )
-    init_data = handle_response(init_response)
-    media_id = init_data.dig('data', 'id')
-
-    # Step 2: Append media data
-    HTTParty.post(
-      'https://api.x.com/2/media/upload',
-      headers: {
-        'Authorization' => "Bearer #{bearer_token}",
-        'Content-Type' => 'multipart/form-data'
-      },
-      multipart: true,
-      body: {
-        command: 'APPEND',
-        media_id: media_id,
-        segment_index: 0,
-        media: file_data
-      }
-    )
-
-    # Step 3: Finalize upload
-    finalize_response = HTTParty.post(
-      'https://api.x.com/2/media/upload',
-      headers: { 'Authorization' => "Bearer #{bearer_token}" },
-      body: {
-        command: 'FINALIZE',
-        media_id: media_id
-      }
-    )
-
-    finalize_data = handle_response(finalize_response)
-    # Return v1.1-compatible format for backward compatibility
+    media_id = media_upload_init(file_data, mime_type)
+    media_upload_append(media_id, file_data)
+    finalize_data = media_upload_finalize(media_id)
     { 'media_id_string' => finalize_data.dig('data', 'id') }
   end
 
   private
+
+  def media_upload_init(file_data, mime_type)
+    response = HTTParty.post(
+      'https://api.x.com/2/media/upload',
+      headers: { 'Authorization' => "Bearer #{bearer_token}" },
+      body: { command: 'INIT', media_type: mime_type, total_bytes: file_data.bytesize, media_category: media_category_from_mime(mime_type) }
+    )
+    handle_response(response).dig('data', 'id')
+  end
+
+  def media_upload_append(media_id, file_data)
+    HTTParty.post(
+      'https://api.x.com/2/media/upload',
+      headers: { 'Authorization' => "Bearer #{bearer_token}", 'Content-Type' => 'multipart/form-data' },
+      multipart: true,
+      body: { command: 'APPEND', media_id: media_id, segment_index: 0, media: file_data }
+    )
+  end
+
+  def media_upload_finalize(media_id)
+    response = HTTParty.post(
+      'https://api.x.com/2/media/upload',
+      headers: { 'Authorization' => "Bearer #{bearer_token}" },
+      body: { command: 'FINALIZE', media_id: media_id }
+    )
+    handle_response(response)
+  end
 
   def post(path, body:)
     response = self.class.post(
@@ -128,7 +115,7 @@ class X::Client
     when 429
       # X API v2 rate limit headers
       retry_after = response.headers['x-rate-limit-reset']
-      raise X::Errors::RateLimitError, "Rate limit exceeded. Reset at: #{Time.at(retry_after.to_i)}"
+      raise X::Errors::RateLimitError, "Rate limit exceeded. Reset at: #{Time.zone.at(retry_after.to_i)}"
     else
       error_msg = response.parsed_response&.dig('errors', 0, 'message') || response.body
       raise X::Errors::APIError, "X API error (#{response.code}): #{error_msg}"
@@ -136,20 +123,9 @@ class X::Client
   end
 
   def media_category_from_mime(mime_type)
-    case mime_type
-    when %r{^image/} then 'dm_image'
-    when %r{^video/} then 'dm_video'
-    when %r{^audio/} then 'dm_audio'
-    else 'dm_image'
-    end
-  end
-end
+    return 'dm_video' if mime_type.match?(%r{^video/})
+    return 'dm_audio' if mime_type.match?(%r{^audio/})
 
-# Custom error classes
-module X
-  module Errors
-    class APIError < StandardError; end
-    class UnauthorizedError < APIError; end
-    class RateLimitError < APIError; end
+    'dm_image'
   end
 end

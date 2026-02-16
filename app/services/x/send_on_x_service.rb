@@ -6,24 +6,23 @@ class X::SendOnXService < Base::SendOnChannelService
   end
 
   def perform_reply
-    # Ensure we have a valid access token before sending
     ensure_valid_token!
-
     message_result = send_message
-
-    # Update message with source_id from X
-    message.update!(source_id: message_result['id'])
+    source_id = extract_source_id(message_result)
+    message.update!(source_id: source_id)
     Messages::StatusUpdateService.new(message, 'delivered').perform
   rescue X::Errors::UnauthorizedError => e
-    Rails.logger.error "X authorization failed for channel #{channel.id}: #{e.message}"
-    channel.authorization_error!
-    Messages::StatusUpdateService.new(message, 'failed', 'Authorization failed').perform
+    handle_send_error(e, 'Authorization failed') { channel.authorization_error! }
   rescue X::Errors::RateLimitError => e
-    Rails.logger.error "X rate limit exceeded for channel #{channel.id}: #{e.message}"
-    Messages::StatusUpdateService.new(message, 'failed', 'Rate limit exceeded').perform
+    handle_send_error(e, 'Rate limit exceeded')
   rescue StandardError => e
-    Rails.logger.error "Failed to send X message: #{e.message}"
-    Messages::StatusUpdateService.new(message, 'failed', e.message).perform
+    handle_send_error(e, e.message)
+  end
+
+  def handle_send_error(error, error_message, &block)
+    Rails.logger.error "X send error for channel #{channel.id}: #{error.message}"
+    block&.call
+    Messages::StatusUpdateService.new(message, 'failed', error_message).perform
   end
 
   def ensure_valid_token!
@@ -50,13 +49,21 @@ class X::SendOnXService < Base::SendOnChannelService
   end
 
   def send_tweet_reply
-    # Get the original tweet ID from conversation additional attributes
-    reply_to_tweet_id = message.content_attributes['in_reply_to_external_id']
+    reply_to_tweet_id = find_reply_to_tweet_id
+
+    # Prepend @screen_name like old Twitter did for tweet replies
+    tweet_text = "#{screen_name_mention} #{message.outgoing_content}".strip
 
     x_client.create_tweet(
-      text: message.outgoing_content,
+      text: tweet_text,
       reply_to_tweet_id: reply_to_tweet_id
     )
+  end
+
+  def screen_name_mention
+    # Get the contact's screen_name to @mention in the reply
+    username = contact.additional_attributes&.dig('username') || contact.additional_attributes&.dig('screen_name')
+    username.present? ? "@#{username}" : ''
   end
 
   def process_attachments
@@ -86,8 +93,24 @@ class X::SendOnXService < Base::SendOnChannelService
   end
 
   def tweet_reply?
-    # Check if this is a reply to a tweet (has in_reply_to_external_id in content_attributes)
-    message.content_attributes['in_reply_to_external_id'].present?
+    conversation = message.conversation
+    conversation.additional_attributes&.dig('type') == 'tweet'
+  end
+
+  def extract_source_id(result)
+    # Tweet response: { "data" => { "id" => "123" } }
+    # DM response: { "data" => { "dm_event_id" => "456" } } or { "dm_event_id" => "456" }
+    result.dig('data', 'id') || result.dig('data', 'dm_event_id') || result['dm_event_id'] || result['id']
+  end
+
+  def find_reply_to_tweet_id
+    # Find the latest message with a source_id in the conversation to reply in thread
+    # Mirrors old Twitter pattern: reply to the latest tweet in the conversation
+    latest_tweet = message.conversation.messages
+                          .where.not(source_id: [nil, ''])
+                          .order(created_at: :desc)
+                          .first
+    latest_tweet&.source_id || message.conversation.additional_attributes&.dig('tweet_id')
   end
 
   def x_client
