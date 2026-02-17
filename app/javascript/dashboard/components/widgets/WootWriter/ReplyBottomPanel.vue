@@ -180,7 +180,7 @@ export default {
       return this.showFileUpload || this.isNote;
     },
     showAudioRecorderButton() {
-      if (this.isALineChannel) {
+      if (this.isALineChannel || this.isAXChannel) {
         return false;
       }
       // Disable audio recorder for safari browser as recording is not supported

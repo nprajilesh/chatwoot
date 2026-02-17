@@ -257,6 +257,11 @@ export default {
       if (this.isAWhatsAppChannel) {
         return MESSAGE_MAX_LENGTH.WHATSAPP_CLOUD;
       }
+      if (this.isAXChannel) {
+        return this.conversationType === 'tweet'
+          ? MESSAGE_MAX_LENGTH.X_TWEET
+          : MESSAGE_MAX_LENGTH.X_DM;
+      }
       return MESSAGE_MAX_LENGTH.GENERAL;
     },
     showFileUpload() {
@@ -269,7 +274,8 @@ export default {
         this.isASmsInbox ||
         this.isATelegramChannel ||
         this.isALineChannel ||
-        this.isAnInstagramChannel
+        this.isAnInstagramChannel ||
+        this.isAXChannel
       );
     },
     replyButtonLabel() {
